@@ -28,23 +28,46 @@ export interface SearchQuery {
   'minFollowers' : bigint,
   'projectDescriptions' : Array<string>,
 }
+export interface TransformationInput {
+  'context' : Uint8Array,
+  'response' : http_request_result,
+}
+export interface TransformationOutput {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface http_header { 'value' : string, 'name' : string }
+export interface http_request_result {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'fetchXApiRaw' : ActorMethod<
+    [string],
+    { 'ok' : string } |
+      { 'err' : string }
+  >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getSavedInfluencers' : ActorMethod<[], Array<Influencer>>,
   'getSearchHistory' : ActorMethod<[], Array<SearchQuery>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'getXApiTokenStatus' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'removeInfluencer' : ActorMethod<[string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'saveInfluencer' : ActorMethod<[Influencer], undefined>,
   'saveSearchQuery' : ActorMethod<[SearchQuery], undefined>,
+  'setXApiToken' : ActorMethod<[string], undefined>,
+  'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

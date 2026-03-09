@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import DiscoverPage from "./pages/DiscoverPage";
 import HistoryPage from "./pages/HistoryPage";
 import SavedPage from "./pages/SavedPage";
+import SettingsPage from "./pages/SettingsPage";
 
 /* ── Discover search params schema ───────────────────── */
 export type DiscoverSearch = {
@@ -50,10 +51,17 @@ const historyRoute = createRoute({
   component: HistoryPage,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   discoverRoute,
   savedRoute,
   historyRoute,
+  settingsRoute,
 ]);
 
 const router = createRouter({ routeTree });

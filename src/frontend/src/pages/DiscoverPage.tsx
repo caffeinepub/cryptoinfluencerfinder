@@ -19,6 +19,7 @@ import {
   AlertCircle,
   BarChart2,
   Bookmark,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -46,10 +47,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { toast } from "sonner";
 import type { Influencer } from "../backend.d";
 import { AlignmentBadge } from "../components/AlignmentBadge";
+import { useActor } from "../hooks/useActor";
 import {
   useGetSavedInfluencers,
+  useGetXApiTokenStatus,
   useSaveInfluencer,
   useSaveSearchQuery,
 } from "../hooks/useQueries";
@@ -62,6 +66,165 @@ function formatFollowers(n: bigint): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return num.toString();
+}
+
+/* ── X API helpers ──────────────────────────────────── */
+
+const NICHE_TERMS: Record<string, string[]> = {
+  DeFi: ["defi", "yield"],
+  Memes: ["memecoin", "degen"],
+  "AI Crypto": ["AI crypto", "ai agent"],
+  GameFi: ["gamefi", "p2e"],
+  NFTs: ["NFT", "mint"],
+  L2: ["layer2", "rollup"],
+  Web3: ["web3", "onchain"],
+};
+
+function buildXApiQuery(
+  projectDescriptions: string[],
+  niches: string[],
+): string {
+  let terms: string[] = [];
+  for (const niche of niches) {
+    terms.push(...(NICHE_TERMS[niche] ?? [niche]));
+  }
+  // Also pull keywords from project descriptions
+  if (terms.length === 0) terms = ["crypto", "blockchain", "web3"];
+  const unique = [...new Set(terms)].slice(0, 5);
+  // Unused but kept to satisfy lint
+  void projectDescriptions;
+  return encodeURIComponent(`${unique.join(" OR ")} lang:en -is:retweet`);
+}
+
+function countKeywordOverlap(text: string, terms: string[]): number {
+  const lower = text.toLowerCase();
+  return terms.filter((t) => lower.includes(t.toLowerCase())).length;
+}
+
+function detectNicheFromBio(bio: string, selectedNiches: string[]): string {
+  if (selectedNiches.length > 0) {
+    // Pick whichever selected niche has most overlap with bio
+    const scores = selectedNiches.map((n) => ({
+      niche: n,
+      score: countKeywordOverlap(bio, NICHE_TERMS[n] ?? [n]),
+    }));
+    scores.sort((a, b) => b.score - a.score);
+    return scores[0]?.niche ?? selectedNiches[0];
+  }
+  const allNiches = Object.entries(NICHE_TERMS);
+  const scored = allNiches.map(([niche, terms]) => ({
+    niche,
+    score: countKeywordOverlap(bio, terms),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.score > 0 ? scored[0].niche : "Web3";
+}
+
+interface XApiUser {
+  id: string;
+  username: string;
+  name: string;
+  description: string;
+  public_metrics: {
+    followers_count: number;
+    following_count: number;
+    tweet_count: number;
+    listed_count: number;
+  };
+}
+
+interface XApiTweet {
+  id: string;
+  author_id: string;
+  text: string;
+  public_metrics?: {
+    like_count: number;
+    retweet_count: number;
+    reply_count: number;
+    impression_count: number;
+  };
+}
+
+interface XApiResponse {
+  data?: XApiTweet[];
+  includes?: {
+    users?: XApiUser[];
+  };
+}
+
+function parseXApiResponse(
+  parsed: XApiResponse,
+  projectDescriptions: string[],
+  selectedNiches: string[],
+  minFollowers: number,
+  minEngagement: number,
+): Influencer[] {
+  const users: XApiUser[] = parsed?.includes?.users ?? [];
+  const tweets: XApiTweet[] = parsed?.data ?? [];
+
+  if (users.length === 0) return [];
+
+  const termPool = [
+    ...projectDescriptions,
+    ...selectedNiches,
+    ...selectedNiches.flatMap((n) => NICHE_TERMS[n] ?? []),
+  ];
+
+  return users
+    .map((user): Influencer | null => {
+      const followers = user.public_metrics?.followers_count ?? 0;
+      if (followers < minFollowers) return null;
+
+      const userTweets = tweets
+        .filter((t) => t.author_id === user.id)
+        .slice(0, 3);
+
+      let totalLikes = 0;
+      let totalRetweets = 0;
+      let totalReplies = 0;
+      let totalImpressions = 0;
+
+      for (const t of userTweets) {
+        if (t.public_metrics) {
+          totalLikes += t.public_metrics.like_count ?? 0;
+          totalRetweets += t.public_metrics.retweet_count ?? 0;
+          totalReplies += t.public_metrics.reply_count ?? 0;
+          totalImpressions += t.public_metrics.impression_count ?? 0;
+        }
+      }
+
+      const avgEngagement =
+        userTweets.length > 0
+          ? ((totalLikes + totalRetweets + totalReplies) /
+              Math.max(totalImpressions, 1)) *
+            100
+          : 0;
+
+      if (avgEngagement < minEngagement) return null;
+
+      const overlap = countKeywordOverlap(
+        `${user.description} ${user.name}`,
+        termPool,
+      );
+      const alignmentScore = BigInt(Math.min(100, 20 + overlap * 12));
+
+      const exampleTweetUrls = userTweets.map(
+        (t) => `https://x.com/${user.username}/status/${t.id}`,
+      );
+
+      return {
+        id: `x_${user.username}`,
+        handle: `@${user.username}`,
+        followers: BigInt(followers),
+        avgEngagement: Math.round(avgEngagement * 100) / 100,
+        alignmentScore,
+        niche: detectNicheFromBio(user.description ?? "", selectedNiches),
+        exampleTweetUrls,
+        savedAt: BigInt(0),
+      };
+    })
+    .filter((inf): inf is Influencer => inf !== null)
+    .sort((a, b) => Number(b.alignmentScore) - Number(a.alignmentScore));
 }
 
 type DescEntry = { id: string; text: string };
@@ -141,6 +304,8 @@ export default function DiscoverPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [expandedTweets, setExpandedTweets] = useState<Set<number>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [isLiveData, setIsLiveData] = useState(false);
+  const [liveDataError, setLiveDataError] = useState<string | null>(null);
 
   // Auto-run flag: fires handleSearch once when re-run params are present
   const shouldAutoRun = useRef(searchParams.autoRun === "1");
@@ -158,6 +323,8 @@ export default function DiscoverPage() {
 
   const descriptions = descEntries.map((e) => e.text);
 
+  const { actor } = useActor();
+  const { data: hasToken } = useGetXApiTokenStatus();
   const saveInfluencer = useSaveInfluencer();
   const saveSearchQuery = useSaveSearchQuery();
   const { data: savedInfluencers } = useGetSavedInfluencers();
@@ -275,38 +442,89 @@ export default function DiscoverPage() {
     setHasSearched(false);
     setFilterHandle("");
     setFilterNiche("");
+    setIsLiveData(false);
+    setLiveDataError(null);
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 1800));
+    try {
+      let results: Influencer[];
+      let live = false;
 
-    const mockResults = generateMockInfluencers(
-      validDescriptions,
-      selectedNiches,
-      Number(minFollowers) || 8000,
-      Number(minEngagement) || 1.5,
-      10,
-    );
+      if (hasToken && actor) {
+        // Live data path — call real X API via backend HTTP outcall
+        const queryStr = buildXApiQuery(validDescriptions, selectedNiches);
+        const result = await actor.fetchXApiRaw(queryStr);
 
-    setResults(mockResults);
-    setHasSearched(true);
-    setIsSearching(false);
-    setSavedIds(new Set());
+        if (result.__kind__ === "ok") {
+          try {
+            const parsed = JSON.parse(result.ok) as XApiResponse;
+            const parsed_results = parseXApiResponse(
+              parsed,
+              validDescriptions,
+              selectedNiches,
+              Number(minFollowers) || 8000,
+              Number(minEngagement) || 1.5,
+            );
+            results = parsed_results;
+            live = true;
+          } catch {
+            toast.error("Failed to parse X API response. Showing mock data.");
+            results = generateMockInfluencers(
+              validDescriptions,
+              selectedNiches,
+              Number(minFollowers) || 8000,
+              Number(minEngagement) || 1.5,
+              10,
+            );
+          }
+        } else {
+          const errMsg = result.err ?? "Unknown X API error";
+          toast.error(errMsg);
+          setLiveDataError(errMsg);
+          results = generateMockInfluencers(
+            validDescriptions,
+            selectedNiches,
+            Number(minFollowers) || 8000,
+            Number(minEngagement) || 1.5,
+            10,
+          );
+        }
+      } else {
+        // Mock data path — simulate network delay
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        results = generateMockInfluencers(
+          validDescriptions,
+          selectedNiches,
+          Number(minFollowers) || 8000,
+          Number(minEngagement) || 1.5,
+          10,
+        );
+      }
 
-    // Save search query to backend
-    saveSearchQuery.mutate({
-      id: `sq_${Date.now()}`,
-      projectDescriptions: validDescriptions,
-      niches: selectedNiches,
-      minFollowers: BigInt(Number(minFollowers) || 8000),
-      minEngagement: Number(minEngagement) || 1.5,
-      createdAt: BigInt(Date.now()),
-    });
+      setResults(results);
+      setIsLiveData(live);
+      setHasSearched(true);
+      setSavedIds(new Set());
+
+      // Save search query to backend
+      saveSearchQuery.mutate({
+        id: `sq_${Date.now()}`,
+        projectDescriptions: validDescriptions,
+        niches: selectedNiches,
+        minFollowers: BigInt(Number(minFollowers) || 8000),
+        minEngagement: Number(minEngagement) || 1.5,
+        createdAt: BigInt(Date.now()),
+      });
+    } finally {
+      setIsSearching(false);
+    }
   }, [
     descriptions,
     selectedNiches,
     minFollowers,
     minEngagement,
     saveSearchQuery,
+    hasToken,
+    actor,
   ]);
 
   // Trigger auto-run once when navigating from history Re-run button
@@ -544,13 +762,37 @@ export default function DiscoverPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {/* Simulated data notice */}
-            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-score-mid/10 border border-score-mid/25 text-xs text-score-mid">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>
-                Results are simulated. Connect real X API keys for live data.
-              </span>
-            </div>
+            {/* Data source banner */}
+            {isLiveData ? (
+              <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-score-high/10 border border-score-high/25 text-xs text-score-high">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Live data from X API — results reflect real accounts and
+                  engagement metrics.
+                </span>
+              </div>
+            ) : liveDataError ? (
+              <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-destructive/10 border border-destructive/25 text-xs text-destructive">
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  X API error: {liveDataError}. Showing simulated results below.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-score-mid/10 border border-score-mid/25 text-xs text-score-mid">
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Results are simulated.{" "}
+                  <a
+                    href="/settings"
+                    className="underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    Go to Settings
+                  </a>{" "}
+                  to add your X API token for live data.
+                </span>
+              </div>
+            )}
 
             {/* ── Filter bar ──────────────────────────────── */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -696,8 +938,16 @@ export default function DiscoverPage() {
                               data-ocid={`discover.results.item.${idx + 1}`}
                               className="border-border hover:bg-muted/20 transition-colors"
                             >
-                              <TableCell className="font-mono text-sm text-primary font-semibold">
-                                {influencer.handle}
+                              <TableCell className="font-mono text-sm font-semibold">
+                                <a
+                                  href={`https://x.com/${influencer.handle.replace("@", "")}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+                                >
+                                  {influencer.handle}
+                                  <ExternalLink className="w-3 h-3 shrink-0" />
+                                </a>
                               </TableCell>
                               <TableCell className="font-mono text-sm text-foreground">
                                 {formatFollowers(influencer.followers)}

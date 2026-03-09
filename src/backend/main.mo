@@ -10,7 +10,11 @@ import Time "mo:core/Time";
 import Principal "mo:core/Principal";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import OutCall "http-outcalls/outcall";
+import Migration "migration";
 
+// Apply data migration on upgrade
+(with migration = Migration.run)
 actor {
   module Influencer {
     public func compareBySavedAt(a : Influencer, b : Influencer) : Order.Order {
@@ -48,7 +52,7 @@ actor {
     name : Text;
   };
 
-  // Initialize the access control system
+  // Initialize access control system
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
@@ -61,7 +65,53 @@ actor {
   // Store user profiles
   let userProfiles = Map.empty<Principal, UserProfile>();
 
-  // User profile management functions
+  // Stable X API token
+  var xApiToken : ?Text = null;
+
+  public query ({ caller }) func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
+  };
+
+  // X API token management
+  public shared ({ caller }) func setXApiToken(token : Text) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can set X API token");
+    };
+    xApiToken := ?token;
+  };
+
+  public query ({ caller }) func getXApiTokenStatus() : async Bool {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can get token status");
+    };
+    switch (xApiToken) {
+      case (?_) { true };
+      case (null) { false };
+    };
+  };
+
+  // HTTP outcall to X API
+  public shared ({ caller }) func fetchXApiRaw(queryStr : Text) : async { #ok : Text; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can fetch X API");
+    };
+
+    switch (xApiToken) {
+      case (null) { return #err("No X API token configured") };
+      case (?token) {
+        let url = "https://api.twitter.com/2/tweets/search/recent?query=" # queryStr # "&max_results=20&tweet.fields=public_metrics%2Cauthor_id%2Ccreated_at%2Ctext&expansions=author_id&user.fields=public_metrics%2Cdescription%2Cusername%2Cname";
+        let headers = [{ name = "Authorization"; value = "Bearer " # token }];
+        try {
+          let response = await OutCall.httpGetRequest(url, headers, transform);
+          #ok(response);
+        } catch (error) {
+          #err("HTTP outcall failed: " # error.message());
+        };
+      };
+    };
+  };
+
+  // User profile management
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can access profiles");
@@ -83,7 +133,7 @@ actor {
     userProfiles.add(caller, profile);
   };
 
-  // Helper function to get or create user's influencer map
+  // Helper to get or create user's influencer map
   private func getUserInfluencerMap(user : Principal) : Map.Map<Text, Influencer> {
     switch (userInfluencers.get(user)) {
       case (?map) { map };
@@ -95,7 +145,7 @@ actor {
     };
   };
 
-  // Helper function to get or create user's search query map
+  // Helper to get or create user's search query map
   private func getUserSearchQueryMap(user : Principal) : Map.Map<Text, SearchQuery> {
     switch (userSearchQueries.get(user)) {
       case (?map) { map };
@@ -107,6 +157,7 @@ actor {
     };
   };
 
+  // Influencer management
   public shared ({ caller }) func saveInfluencer(influencer : Influencer) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save influencers");
@@ -150,6 +201,7 @@ actor {
     };
   };
 
+  // Search query management
   public shared ({ caller }) func saveSearchQuery(searchQuery : SearchQuery) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save search queries");

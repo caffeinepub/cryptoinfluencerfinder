@@ -1,7 +1,7 @@
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { BookmarkCheck, Compass, History, Zap } from "lucide-react";
+import { BookmarkCheck, Compass, History, Settings, Zap } from "lucide-react";
 
 const NAV_ITEMS = [
   { path: "/", label: "Discover", icon: Compass, ocid: "nav.discover.link" },
@@ -16,6 +16,12 @@ const NAV_ITEMS = [
     label: "History",
     icon: History,
     ocid: "nav.history.link",
+  },
+  {
+    path: "/settings",
+    label: "Settings",
+    icon: Settings,
+    ocid: "nav.settings.link",
   },
 ];
 

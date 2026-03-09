@@ -89,6 +89,28 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface TransformationOutput {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface TransformationInput {
+    context: Uint8Array;
+    response: http_request_result;
+}
+export interface SearchQuery {
+    id: string;
+    createdAt: bigint;
+    niches: Array<string>;
+    minEngagement: number;
+    minFollowers: bigint;
+    projectDescriptions: Array<string>;
+}
 export interface Influencer {
     id: string;
     alignmentScore: bigint;
@@ -102,13 +124,9 @@ export interface Influencer {
 export interface UserProfile {
     name: string;
 }
-export interface SearchQuery {
-    id: string;
-    createdAt: bigint;
-    niches: Array<string>;
-    minEngagement: number;
-    minFollowers: bigint;
-    projectDescriptions: Array<string>;
+export interface http_header {
+    value: string;
+    name: string;
 }
 export enum UserRole {
     admin = "admin",
@@ -118,16 +136,26 @@ export enum UserRole {
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    fetchXApiRaw(queryStr: string): Promise<{
+        __kind__: "ok";
+        ok: string;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getSavedInfluencers(): Promise<Array<Influencer>>;
     getSearchHistory(): Promise<Array<SearchQuery>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    getXApiTokenStatus(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     removeInfluencer(id: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveInfluencer(influencer: Influencer): Promise<void>;
     saveSearchQuery(searchQuery: SearchQuery): Promise<void>;
+    setXApiToken(token: string): Promise<void>;
+    transform(input: TransformationInput): Promise<TransformationOutput>;
 }
 import type { UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -160,32 +188,52 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async fetchXApiRaw(arg0: string): Promise<{
+        __kind__: "ok";
+        ok: string;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.fetchXApiRaw(arg0);
+                return from_candid_variant_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.fetchXApiRaw(arg0);
+            return from_candid_variant_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getCallerUserProfile(): Promise<UserProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n5(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n5(this._uploadFile, this._downloadFile, result);
         }
     }
     async getSavedInfluencers(): Promise<Array<Influencer>> {
@@ -220,14 +268,28 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getXApiTokenStatus(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getXApiTokenStatus();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getXApiTokenStatus();
+            return result;
         }
     }
     async isCallerAdmin(): Promise<boolean> {
@@ -300,14 +362,61 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async setXApiToken(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setXApiToken(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setXApiToken(arg0);
+            return result;
+        }
+    }
+    async transform(arg0: TransformationInput): Promise<TransformationOutput> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.transform(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.transform(arg0);
+            return result;
+        }
+    }
 }
-function from_candid_UserRole_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n5(_uploadFile, _downloadFile, value);
+function from_candid_UserRole_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n6(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+function from_candid_opt_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ok: string;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: string;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;
