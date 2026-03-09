@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BookmarkCheck, ExternalLink, Trash2 } from "lucide-react";
+import { BookmarkCheck, Download, ExternalLink, Trash2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Influencer } from "../backend.d";
 import { AlignmentBadge } from "../components/AlignmentBadge";
@@ -33,6 +33,54 @@ function formatDate(ts: bigint): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function escapeCsvCell(value: string): string {
+  // Wrap in double quotes if the value contains a comma, double quote, or newline
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function exportInfluencersCSV(influencers: Influencer[]): void {
+  const headers = [
+    "Handle",
+    "Followers",
+    "Avg Engagement (%)",
+    "Alignment Score",
+    "Niche",
+    "Saved Date",
+    "Example Tweet URL",
+  ];
+
+  const rows = influencers.map((inf) => [
+    escapeCsvCell(inf.handle),
+    escapeCsvCell(String(Number(inf.followers))),
+    escapeCsvCell(inf.avgEngagement.toFixed(2)),
+    escapeCsvCell(String(Number(inf.alignmentScore))),
+    escapeCsvCell(inf.niche),
+    escapeCsvCell(
+      Number(inf.savedAt) === 0
+        ? ""
+        : new Date(Number(inf.savedAt)).toISOString(),
+    ),
+    escapeCsvCell(
+      inf.exampleTweetUrls.length > 0 ? inf.exampleTweetUrls[0] : "",
+    ),
+  ]);
+
+  const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join(
+    "\n",
+  );
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "saved-influencers.csv";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function SavedPage() {
@@ -98,6 +146,16 @@ export default function SavedPage() {
             <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {influencers.length} Saved
             </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => exportInfluencersCSV(influencers)}
+              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              data-ocid="saved.export_button"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </Button>
           </div>
 
           <div className="overflow-x-auto">
