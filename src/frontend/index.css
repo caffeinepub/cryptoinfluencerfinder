@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Fonts ─────────────────────────────────────────────── */
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/assets/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  /* ── Dark-first crypto analytics palette ───────────────── */
+  :root {
+    --radius: 0.5rem;
+
+    /* Background layers: deep navy-black */
+    --background: 0.10 0.012 265;
+    --foreground: 0.93 0.01 240;
+
+    /* Card surfaces: slightly lighter panel */
+    --card: 0.14 0.016 265;
+    --card-foreground: 0.93 0.01 240;
+
+    --popover: 0.16 0.018 265;
+    --popover-foreground: 0.93 0.01 240;
+
+    /* Primary: electric cyan */
+    --primary: 0.80 0.15 198;
+    --primary-foreground: 0.08 0.02 265;
+
+    /* Secondary: muted slate */
+    --secondary: 0.20 0.02 265;
+    --secondary-foreground: 0.80 0.01 240;
+
+    /* Muted: low contrast surfaces */
+    --muted: 0.18 0.016 265;
+    --muted-foreground: 0.55 0.02 240;
+
+    /* Accent: bright teal glow */
+    --accent: 0.75 0.18 192;
+    --accent-foreground: 0.08 0.02 265;
+
+    /* Destructive: hot red */
+    --destructive: 0.65 0.22 25;
+    --destructive-foreground: 0.985 0 0;
+
+    /* Borders and inputs */
+    --border: 0.25 0.025 265;
+    --input: 0.20 0.02 265;
+    --ring: 0.75 0.15 198;
+
+    /* Score colors */
+    --score-high: 0.72 0.20 142;
+    --score-mid: 0.82 0.18 74;
+    --score-low: 0.65 0.22 25;
+
+    /* Charts */
+    --chart-1: 0.80 0.15 198;
+    --chart-2: 0.72 0.20 142;
+    --chart-3: 0.82 0.18 74;
+    --chart-4: 0.75 0.18 295;
+    --chart-5: 0.65 0.22 25;
+
+    /* Sidebar */
+    --sidebar: 0.12 0.014 265;
+    --sidebar-foreground: 0.87 0.01 240;
+    --sidebar-primary: 0.80 0.15 198;
+    --sidebar-primary-foreground: 0.08 0.02 265;
+    --sidebar-accent: 0.18 0.018 265;
+    --sidebar-accent-foreground: 0.87 0.01 240;
+    --sidebar-border: 0.22 0.022 265;
+    --sidebar-ring: 0.75 0.15 198;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Cabinet Grotesk", sans-serif;
+  }
+}
+
+/* ── Utility classes ───────────────────────────────────── */
+@layer utilities {
+  .font-mono-data {
+    font-family: "Geist Mono", monospace;
+  }
+
+  .glow-cyan {
+    box-shadow: 0 0 20px oklch(0.80 0.15 198 / 0.25);
+  }
+
+  .glow-cyan-sm {
+    box-shadow: 0 0 8px oklch(0.80 0.15 198 / 0.3);
+  }
+
+  .scan-line {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.80 0.15 198 / 0.08) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: scan 3s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(oklch(0.80 0.15 198 / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.80 0.15 198 / 0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}
